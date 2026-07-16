@@ -72,18 +72,18 @@ void setup() {
     char mon[4]; int day, year, hour, min, sec;
     sscanf(__DATE__, "%s %d %d", mon, &day, &year);
     sscanf(__TIME__, "%d:%d:%d", &hour, &min, &sec);
-    auto cur = CoreS3.Rtc.getDateTime();
-    if (cur.date.year < 2020 || cur.date.year < year) {
-        m5::rtc_datetime_t dt;
-        dt.date.year = year; dt.date.month = 1; dt.date.date = day;
-        for (int i = 0; i < 12; i++) {
-            if (strncmp(mon, months[i], 3) == 0) { dt.date.month = i+1; break; }
-        }
-        dt.time.hours = hour; dt.time.minutes = min; dt.time.seconds = sec;
-        CoreS3.Rtc.setDateTime(dt);
-        Serial.printf("[RTC] Set: %04d/%02d/%02d %02d:%02d:%02d\n",
-                      year, dt.date.month, day, hour, min, sec);
+    // 常にコンパイル時刻でRTCを更新
+    m5::rtc_datetime_t dt;
+    dt.date.year = year; dt.date.month = 1; dt.date.date = day;
+    for (int i = 0; i < 12; i++) {
+        if (strncmp(mon, months[i], 3) == 0) { dt.date.month = i+1; break; }
     }
+    // コンパイルからアップロードまでの時間を補正（約2分）
+    dt.time.hours = hour; dt.time.minutes = min + 2; dt.time.seconds = sec;
+    if (dt.time.minutes >= 60) { dt.time.hours++; dt.time.minutes -= 60; }
+    CoreS3.Rtc.setDateTime(dt);
+    Serial.printf("[RTC] Set: %04d/%02d/%02d %02d:%02d:%02d\n",
+                  year, dt.date.month, day, dt.time.hours, dt.time.minutes, sec);
 
     g_state = State::SCREEN1;
 }
@@ -253,10 +253,9 @@ void loop() {
         switch (btn) {
         case Btn5::STARTREC: {
             ui_setStatus(" Preparing...", TFT_YELLOW);
-            char fname[60];
-            buildFilename(fname, sizeof(fname), g_lastTask, "wav");
-            strncpy(s_lastRecPath, fname, sizeof(s_lastRecPath));
-            rec_start(fname);
+            // 一時ファイルに録音（Saveで正式保存）
+            strncpy(s_lastRecPath, "/recordings/_tmp.wav", sizeof(s_lastRecPath));
+            rec_start("/recordings/_tmp.wav");
             drawScreen5(true);
             g_state = State::SCREEN5_REC;
             break;
@@ -266,17 +265,24 @@ void loop() {
             rec_play();
             ui_setStatus(" Stopped", TFT_WHITE);
             break;
-        case Btn5::SAVE:
+        case Btn5::SAVE: {
+            // 一時ファイルを正式ファイル名にリネーム
+            char fname[60];
+            buildFilename(fname, sizeof(fname), g_lastTask, "wav");
+            if (SD.exists("/recordings/_tmp.wav")) {
+                SD.rename("/recordings/_tmp.wav", fname);
+                Serial.printf("[Save] %s\n", fname);
+            }
             ui_setStatus(" Saved! (^-^)", TFT_GREEN);
             delay(1500);
             updateRecStatus5(false);
             break;
+        }
         case Btn5::YARI: {
             ui_setStatus(" Preparing...", TFT_YELLOW);
-            char fname[60];
-            buildFilename(fname, sizeof(fname), g_lastTask, "wav");
-            strncpy(s_lastRecPath, fname, sizeof(s_lastRecPath));
-            rec_start(fname);
+            // 一時ファイルに上書き録音
+            strncpy(s_lastRecPath, "/recordings/_tmp.wav", sizeof(s_lastRecPath));
+            rec_start("/recordings/_tmp.wav");
             drawScreen5(true);
             g_state = State::SCREEN5_REC;
             break;
