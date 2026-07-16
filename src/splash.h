@@ -1,18 +1,13 @@
 #pragma once
 #include <M5CoreS3.h>
+#include "ui.h"
+
+
 
 inline void drawSplash() {
     auto& d = CoreS3.Display;
     d.fillScreen(0x4DA8);
     d.fillRect(0, 0, 320, 40, d.color565(125, 207, 248));
-
-    // ソラミルン（上部）
-    d.setTextDatum(MC_DATUM);
-    d.setTextColor(TFT_WHITE);
-    d.setFont(&fonts::efontJA_16);
-    d.setTextSize(2);
-    d.drawString("ソラミルン", 160, 20);
-    d.setFont(nullptr);
 
     // 顔（上に寄せて小さく）
     d.fillCircle(160, 90, 80, d.color565(254, 239, 200));
@@ -74,9 +69,27 @@ inline void drawSplash() {
     // 口：丸い雲
     d.fillCircle(160, 132, 17, TFT_WHITE);
 
+    // ソラミルン（左寄せ）
+    d.setTextDatum(ML_DATUM);
+    d.setTextColor(d.color565(30, 100, 220));
+    d.setFont(&fonts::efontJA_16);
+    d.setTextSize(2);
+    d.drawString("ソラミルン", 8, 42);
+    d.setFont(nullptr);
+
+    // 右上：音量ボタン（Nextボタンと同サイズ）
+    d.fillRoundRect(220, 4, 96, 76, 8, d.color565(30, 80, 160));
+    d.drawRoundRect(220, 4, 96, 76, 8, 0x4A69);
+    d.setTextColor(TFT_WHITE);
+    d.setTextDatum(MC_DATUM);
+    d.setTextSize(1);
+    d.drawString("VOL", 268, 22);
+    d.setTextSize(3);
+    d.drawString(VOL_LABELS[g_volumeLevel], 268, 52);
+
     // 下段3ボタン
-    // はじめに
-    d.fillRoundRect(4, 158, 96, 76, 8, d.color565(41, 69, 149));
+    // はじめに（緑）
+    d.fillRoundRect(4, 158, 96, 76, 8, d.color565(49, 134, 48));
     d.drawRoundRect(4, 158, 96, 76, 8, 0x4A69);
     d.setFont(&fonts::efontJA_16);
     d.setTextSize(1);
@@ -85,23 +98,24 @@ inline void drawSplash() {
     d.drawString("はじめに", 52, 196);
     d.setFont(nullptr);
 
-    // 名付け
-    d.fillRoundRect(112, 158, 96, 76, 8, d.color565(41, 69, 149));
+    // ユーザーネーム（オレンジ）
+    d.fillRoundRect(112, 158, 96, 76, 8, d.color565(196, 164, 0));
     d.drawRoundRect(112, 158, 96, 76, 8, 0x4A69);
     d.setFont(&fonts::efontJA_16);
     d.setTextSize(1);
     d.setTextColor(TFT_WHITE);
     d.setTextDatum(MC_DATUM);
-    d.drawString("名付け", 160, 196);
+    d.drawString("ユーザー", 160, 186);
+    d.drawString("ネーム", 160, 210);
     d.setFont(nullptr);
 
-    // End
-    d.fillRoundRect(220, 158, 96, 76, 8, d.color565(100, 10, 10));
+    // Next（青）
+    d.fillRoundRect(220, 158, 96, 76, 8, d.color565(41, 69, 149));
     d.drawRoundRect(220, 158, 96, 76, 8, 0x4A69);
     d.setTextSize(2);
     d.setTextColor(TFT_WHITE);
     d.setTextDatum(MC_DATUM);
-    d.drawString("End", 268, 185);
+    d.drawString("Next", 268, 185);
     d.setTextSize(1);
-    d.drawString("m(_ _)m", 268, 210);
+    d.drawString("(>>)", 268, 210);
 }

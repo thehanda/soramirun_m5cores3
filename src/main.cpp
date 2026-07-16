@@ -12,7 +12,6 @@ enum class State {
     SCREEN1,
     SCREEN2,
     SCREEN3,
-    SCREEN4,
     SCREEN5_READY,
     SCREEN5_REC,
     SCREEN6,
@@ -22,6 +21,7 @@ enum class State {
 State    g_state     = State::SCREEN1;
 char     g_lastTask[20] = "task1";
 uint32_t g_previewMs = 0;
+uint8_t  g_volumeLevel = 0; // 0=大, 1=中, 2=小
 
 static void buildFilename(char* buf, size_t bufSize,
                           const char* taskName, const char* ext) {
@@ -48,28 +48,31 @@ static bool initSD() {
     return true;
 }
 
+static void applyVolume() {
+    extern bool s_speakerInited;
+    s_speakerInited = false;
+    CoreS3.Speaker.end();
+    ensureSpeaker();
+}
+
 void setup() {
     auto cfg = M5.config();
     CoreS3.begin(cfg);
     Serial.begin(115200);
     delay(2000);
     Serial.println("=== Soramirun Start ===");
-    Serial.flush();
     CoreS3.Display.setRotation(1);
     if (!initSD()) { while (true) delay(1000); }
 
-    // 画面1を表示
     drawSplash();
 
-    // RTCの現在時刻を確認し、古ければコンパイル時刻で更新
+    // RTCの時刻確認・必要なら更新
     const char* months[] = {"Jan","Feb","Mar","Apr","May","Jun",
                             "Jul","Aug","Sep","Oct","Nov","Dec"};
     char mon[4]; int day, year, hour, min, sec;
     sscanf(__DATE__, "%s %d %d", mon, &day, &year);
     sscanf(__TIME__, "%d:%d:%d", &hour, &min, &sec);
-
     auto cur = CoreS3.Rtc.getDateTime();
-    // RTCが2020年以前 or コンパイル年より古い場合のみ更新
     if (cur.date.year < 2020 || cur.date.year < year) {
         m5::rtc_datetime_t dt;
         dt.date.year = year; dt.date.month = 1; dt.date.date = day;
@@ -80,10 +83,6 @@ void setup() {
         CoreS3.Rtc.setDateTime(dt);
         Serial.printf("[RTC] Set: %04d/%02d/%02d %02d:%02d:%02d\n",
                       year, dt.date.month, day, hour, min, sec);
-    } else {
-        Serial.printf("[RTC] Keep: %04d/%02d/%02d %02d:%02d:%02d\n",
-                      cur.date.year, cur.date.month, cur.date.date,
-                      cur.time.hours, cur.time.minutes, cur.time.seconds);
     }
 
     g_state = State::SCREEN1;
@@ -107,11 +106,11 @@ void loop() {
                     drawScreen7Buttons();
                     g_state = State::SCREEN7;
                 } else {
-                    drawScreen4();
+                    drawScreen2();
                     ui_setStatus(" Cam Error", TFT_RED);
                     delay(1500);
-                    ui_setStatus(" Report", TFT_WHITE);
-                    g_state = State::SCREEN4;
+                    ui_setStatus(" Soramirun", TFT_WHITE);
+                    g_state = State::SCREEN2;
                 }
             }
         }
@@ -131,26 +130,29 @@ void loop() {
         return;
     }
 
-    // 画面1: スプラッシュ＋ボタン
+    // 画面1: スプラッシュ
     if (g_state == State::SCREEN1) {
         Btn1 btn = hitScreen1(t.x, t.y);
         switch (btn) {
         case Btn1::HAJIME:
-            ui_setStatus(" ...", TFT_YELLOW);
             ensureSpeaker();
-            playMp3("/audio/startup.wav");
+            playMp3("/audio/startup2.wav");
             drawSplash();
             break;
-        case Btn1::NAZUKE:
+        case Btn1::USERNAME:
             strncpy(g_lastTask, "name", sizeof(g_lastTask));
             drawScreen5(false);
             g_state = State::SCREEN5_READY;
             break;
-        case Btn1::END:
-            ensureSpeaker();
-            playMp3("/audio/end.wav");
-            delay(500);
-            CoreS3.Power.powerOff();
+        case Btn1::NEXT:
+            drawScreen2();
+            g_state = State::SCREEN2;
+            break;
+        case Btn1::VOLUME:
+            g_volumeLevel = (g_volumeLevel + 1) % 3;
+            CoreS3.Speaker.setVolume(VOL_VALUES[g_volumeLevel]);
+            // 音量ボタンを再描画
+            drawVolBtn();
             break;
         default: break;
         }
@@ -162,7 +164,6 @@ void loop() {
         Btn2 btn = hitScreen2(t.x, t.y);
         switch (btn) {
         case Btn2::TASK1:
-            // 音声後カメラ（画面6）へ
             strncpy(g_lastTask, "task1", sizeof(g_lastTask));
             ui_setStatus(" Task 1...", TFT_YELLOW);
             playMp3("/audio/task1.wav");
@@ -178,7 +179,6 @@ void loop() {
             g_state = State::SCREEN6;
             break;
         case Btn2::TASK2:
-            // 音声後録音（画面5）へ
             strncpy(g_lastTask, "task2", sizeof(g_lastTask));
             ui_setStatus(" Task 2...", TFT_YELLOW);
             playMp3("/audio/task2.wav");
@@ -186,7 +186,6 @@ void loop() {
             g_state = State::SCREEN5_READY;
             break;
         case Btn2::TASK3:
-            // 音声後録音（画面5）へ
             strncpy(g_lastTask, "task3", sizeof(g_lastTask));
             ui_setStatus(" Task 3...", TFT_YELLOW);
             playMp3("/audio/task3.wav");
@@ -194,7 +193,6 @@ void loop() {
             g_state = State::SCREEN5_READY;
             break;
         case Btn2::OPTION: {
-            // 音声後録音（画面5）へ
             uint8_t idx = (esp_random() % 5) + 1;
             char optLabel = 'A' + (idx - 1);
             snprintf(g_lastTask, sizeof(g_lastTask), "option%c", optLabel);
@@ -210,9 +208,12 @@ void loop() {
             drawScreen3();
             g_state = State::SCREEN3;
             break;
-        case Btn2::BACK:
-            drawSplash();
-            g_state = State::SCREEN1;
+        case Btn2::END:
+            ui_setStatus(" Good bye...", TFT_YELLOW);
+            ensureSpeaker();
+            playMp3("/audio/end.wav");
+            delay(500);
+            CoreS3.Power.powerOff();
             break;
         default: break;
         }
@@ -228,12 +229,14 @@ void loop() {
             ui_setStatus(" Task 4...", TFT_YELLOW);
             playMp3("/audio/task4.wav");
             ui_setStatus(" Soramirun", TFT_WHITE);
+            // 画面3のまま
             break;
         case Btn3::TASK5:
             strncpy(g_lastTask, "task5", sizeof(g_lastTask));
             ui_setStatus(" Task 5...", TFT_YELLOW);
             playMp3("/audio/task5.wav");
-            ui_setStatus(" Soramirun", TFT_WHITE);
+            drawScreen5(false);
+            g_state = State::SCREEN5_READY;
             break;
         case Btn3::BACK:
             drawScreen2();
@@ -243,8 +246,6 @@ void loop() {
         }
         return;
     }
-
-
 
     // 画面5: 録音待機
     if (g_state == State::SCREEN5_READY) {

@@ -4,10 +4,13 @@
 
 static bool s_speakerInited = false;
 
+extern uint8_t g_volumeLevel;
+extern const uint8_t VOL_VALUES[];
+
 inline void ensureSpeaker() {
     if (!s_speakerInited) {
         CoreS3.Speaker.begin();
-        CoreS3.Speaker.setVolume(100);
+        CoreS3.Speaker.setVolume(VOL_VALUES[g_volumeLevel]);
         s_speakerInited = true;
     }
 }
