@@ -98,15 +98,15 @@ inline void drawSplash() {
     d.drawString("はじめに", 52, 196);
     d.setFont(nullptr);
 
-    // ユーザーネーム（オレンジ）
+    // ユーザー番号設定（オレンジ）
     d.fillRoundRect(112, 158, 96, 76, 8, d.color565(196, 164, 0));
     d.drawRoundRect(112, 158, 96, 76, 8, 0x4A69);
-    d.setFont(&fonts::efontJA_16);
-    d.setTextSize(1);
     d.setTextColor(TFT_WHITE);
     d.setTextDatum(MC_DATUM);
+    d.setFont(&fonts::efontJA_16);
+    d.setTextSize(1);
     d.drawString("ユーザー", 160, 186);
-    d.drawString("ネーム", 160, 210);
+    d.drawString("番号設定", 160, 210);
     d.setFont(nullptr);
 
     // Next（青）

@@ -79,6 +79,95 @@ inline void drawVolBtn() {
     d.setTextSize(3);
     d.drawString(VOL_LABELS[g_volumeLevel], 268, 52);
 }
+// ── Screen 0: 参加者番号設定 ────────────────────────
+enum class NumStep { TENS, ONES, CONFIRM };
+
+static Rect numBtns[10];
+
+inline void initNumBtns() {
+    for (int i = 0; i < 10; i++) {
+        int col = i % 5;
+        int row = i / 5;
+        numBtns[i] = { (int16_t)(4 + col * 63),
+                       (int16_t)(90 + row * 76),
+                       58, 70 };
+    }
+}
+
+constexpr Rect S0_MODIFY = {   4, 134, 152, 90 };
+constexpr Rect S0_DECIDE = { 164, 134, 152, 90 };
+
+inline void drawScreen0(NumStep step, uint8_t tens, uint8_t ones) {
+    auto& d = CoreS3.Display;
+    d.fillScreen(COL_BG);
+    initNumBtns();
+    d.fillRect(0, 0, 320, 36, COL_STS_BG);
+    d.setTextDatum(MC_DATUM);
+    d.setTextColor(TFT_WHITE);
+    d.setTextSize(2);
+    d.drawString("Participant No.", 160, 18);
+    d.setTextSize(1);
+    d.setTextColor(0xC5E0);
+    if (step == NumStep::TENS) {
+        d.drawString("Select TENS digit", 160, 52);
+    } else if (step == NumStep::ONES) {
+        d.drawString("Select ONES digit", 160, 52);
+    } else {
+        d.drawString("Confirm your number", 160, 52);
+    }
+    d.setTextSize(3);
+    d.setTextColor(TFT_YELLOW);
+    char buf[16];
+    if (step == NumStep::TENS) {
+        snprintf(buf, sizeof(buf), "p _ _");
+    } else if (step == NumStep::ONES) {
+        snprintf(buf, sizeof(buf), "p %d _", tens);
+    } else {
+        snprintf(buf, sizeof(buf), "p %02d", tens * 10 + ones);
+    }
+    d.drawString(buf, 160, 68);
+    if (step == NumStep::CONFIRM) {
+        drawBtnJP(S0_MODIFY, COL_ORANGE, "修正");
+        drawBtnJP(S0_DECIDE, COL_GREEN,  "決定");
+    } else {
+        for (int i = 0; i < 10; i++) {
+            d.fillRoundRect(numBtns[i].x, numBtns[i].y,
+                            numBtns[i].w, numBtns[i].h, 8, COL_BLUE);
+            d.drawRoundRect(numBtns[i].x, numBtns[i].y,
+                            numBtns[i].w, numBtns[i].h, 8, 0x4A69);
+            d.setTextSize(3);
+            d.setTextColor(TFT_WHITE);
+            d.setTextDatum(MC_DATUM);
+            char n[4];
+            snprintf(n, sizeof(n), "%d", i);
+            d.drawString(n, numBtns[i].x + numBtns[i].w/2,
+                            numBtns[i].y + numBtns[i].h/2);
+        }
+    }
+}
+
+inline int hitScreen0(int16_t x, int16_t y, NumStep step) {
+    if (step == NumStep::CONFIRM) {
+        Serial.printf("[S0_CONFIRM] touch x=%d y=%d\n", x, y);
+        Serial.printf("[S0_CONFIRM] MODIFY area: x=%d~%d y=%d~%d\n",
+                      S0_MODIFY.x, S0_MODIFY.x+S0_MODIFY.w,
+                      S0_MODIFY.y, S0_MODIFY.y+S0_MODIFY.h);
+        if (x >= S0_MODIFY.x && x < S0_MODIFY.x+S0_MODIFY.w &&
+            y >= S0_MODIFY.y && y < S0_MODIFY.y+S0_MODIFY.h) return -2;
+        if (x >= S0_DECIDE.x && x < S0_DECIDE.x+S0_DECIDE.w &&
+            y >= S0_DECIDE.y && y < S0_DECIDE.y+S0_DECIDE.h) return -3;
+        return -1;
+    }
+    initNumBtns();
+    for (int i = 0; i < 10; i++) {
+        if (x >= numBtns[i].x && x < numBtns[i].x + numBtns[i].w &&
+            y >= numBtns[i].y && y < numBtns[i].y + numBtns[i].h) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 
 // ── Screen 1 ──────────────────────────────────────────
 // 下段: はじめに(緑) ユーザーネーム(オレンジ) Next(青)

@@ -2,6 +2,7 @@
 #include <M5CoreS3.h>
 #include <SD.h>
 #include <time.h>
+#include <WiFi.h>
 #include "splash.h"
 #include "ui.h"
 #include "audio_player.h"
@@ -9,29 +10,51 @@
 #include "camera_utils.h"
 
 enum class State {
-    SCREEN1,
-    SCREEN2,
-    SCREEN3,
-    SCREEN5_READY,
-    SCREEN5_REC,
-    SCREEN6,
-    SCREEN7,
+    SCREEN0_TENS,    // 参加者番号：十の位選択
+    SCREEN0_ONES,    // 参加者番号：一の位選択
+    SCREEN0_CONFIRM, // 参加者番号：確認
+    SCREEN1,         // スプラッシュ
+    SCREEN2,         // メインメニュー
+    SCREEN3,         // Task4・Task5
+    SCREEN5_READY,   // 録音待機
+    SCREEN5_REC,     // 録音中
+    SCREEN6,         // カメラプレビュー
+    SCREEN7,         // 撮影確認
 };
 
 State    g_state     = State::SCREEN1;
 char     g_lastTask[20] = "task1";
 uint32_t g_previewMs = 0;
 uint8_t  g_volumeLevel = 0; // 0=大, 1=中, 2=小
+uint8_t  g_partTens = 0;
+uint8_t  g_partOnes = 0;
+uint32_t g_fileSeq = 0;
+
+static void loadSeq() {
+    File f = SD.open("/seq.txt", FILE_READ);
+    if (f) {
+        g_fileSeq = f.parseInt();
+        f.close();
+    }
+}
+
+static void saveSeq() {
+    SD.remove("/seq.txt");
+    File f = SD.open("/seq.txt", FILE_WRITE);
+    if (f) {
+        f.printf("%lu", (unsigned long)g_fileSeq);
+        f.close();
+    }
+}
 
 static void buildFilename(char* buf, size_t bufSize,
                           const char* taskName, const char* ext) {
     const char* folder = (strcmp(ext,"jpg")==0) ? "photos" : "recordings";
-    auto dt = CoreS3.Rtc.getDateTime();
-    snprintf(buf, bufSize, "/%s/%s_%04d%02d%02d_%02d%02d%02d.%s",
-             folder, taskName,
-             dt.date.year, dt.date.month, dt.date.date,
-             dt.time.hours, dt.time.minutes, dt.time.seconds,
-             ext);
+    g_fileSeq++;
+    saveSeq();
+    uint8_t pnum = g_partTens * 10 + g_partOnes;
+    snprintf(buf, bufSize, "/%s/%04lu_p%02d_%s.%s",
+             folder, g_fileSeq, pnum, taskName, ext);
 }
 
 static bool initSD() {
@@ -63,6 +86,7 @@ void setup() {
     Serial.println("=== Soramirun Start ===");
     CoreS3.Display.setRotation(1);
     if (!initSD()) { while (true) delay(1000); }
+    loadSeq();
 
     drawSplash();
 
@@ -72,18 +96,53 @@ void setup() {
     char mon[4]; int day, year, hour, min, sec;
     sscanf(__DATE__, "%s %d %d", mon, &day, &year);
     sscanf(__TIME__, "%d:%d:%d", &hour, &min, &sec);
-    // 常にコンパイル時刻でRTCを更新
+    // まずコンパイル時刻でRTCを設定（フォールバック）
     m5::rtc_datetime_t dt;
     dt.date.year = year; dt.date.month = 1; dt.date.date = day;
     for (int i = 0; i < 12; i++) {
         if (strncmp(mon, months[i], 3) == 0) { dt.date.month = i+1; break; }
     }
-    // コンパイルからアップロードまでの時間を補正（約2分）
     dt.time.hours = hour; dt.time.minutes = min + 2; dt.time.seconds = sec;
     if (dt.time.minutes >= 60) { dt.time.hours++; dt.time.minutes -= 60; }
     CoreS3.Rtc.setDateTime(dt);
-    Serial.printf("[RTC] Set: %04d/%02d/%02d %02d:%02d:%02d\n",
+    Serial.printf("[RTC] Compile time: %04d/%02d/%02d %02d:%02d:%02d\n",
                   year, dt.date.month, day, dt.time.hours, dt.time.minutes, sec);
+
+    // WiFiに接続できればNTPで正確な時刻に上書き
+    Serial.println("[WiFi] Trying...");
+    WiFi.begin("Buffalo-A-35C0", "6a5idibtfxdtk");
+    uint8_t retry = 0;
+    while (WiFi.status() != WL_CONNECTED && retry < 10) {
+        delay(300); retry++;
+    }
+    if (WiFi.status() == WL_CONNECTED) {
+        configTime(9 * 3600, 0, "ntp.nict.jp");
+        struct tm ti;
+        bool ntpOk = false;
+        for (int i = 0; i < 20; i++) {
+            if (getLocalTime(&ti) && ti.tm_year > 100) { ntpOk = true; break; }
+            delay(300);
+        }
+        if (ntpOk) {
+            m5::rtc_datetime_t ndt;
+            ndt.date.year  = ti.tm_year + 1900;
+            ndt.date.month = ti.tm_mon + 1;
+            ndt.date.date  = ti.tm_mday;
+            ndt.time.hours   = ti.tm_hour;
+            ndt.time.minutes = ti.tm_min;
+            ndt.time.seconds = ti.tm_sec;
+            CoreS3.Rtc.setDateTime(ndt);
+            Serial.printf("[RTC] NTP sync: %04d/%02d/%02d %02d:%02d:%02d\n",
+                          ndt.date.year, ndt.date.month, ndt.date.date,
+                          ndt.time.hours, ndt.time.minutes, ndt.time.seconds);
+        }
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+    } else {
+        Serial.println("[WiFi] No WiFi - using compile time");
+        WiFi.disconnect(true);
+        WiFi.mode(WIFI_OFF);
+    }
 
     g_state = State::SCREEN1;
 }
@@ -117,6 +176,59 @@ void loop() {
         return;
     }
 
+    // 画面0: 参加者番号設定（十の位）
+    if (g_state == State::SCREEN0_TENS) {
+        if (CoreS3.Touch.getCount() > 0) {
+            auto t0 = CoreS3.Touch.getDetail();
+            if (t0.wasPressed()) {
+                Serial.printf("[S0_TENS] touch x=%d y=%d\n", t0.x, t0.y);
+                int hit = hitScreen0(t0.x, t0.y, NumStep::TENS);
+                Serial.printf("[S0_TENS] hit=%d\n", hit);
+                if (hit >= 0) {
+                    g_partTens = hit;
+                    g_state = State::SCREEN0_ONES;
+                    drawScreen0(NumStep::ONES, g_partTens, 0);
+                }
+            }
+        }
+        return;
+    }
+
+    // 画面0: 参加者番号設定（一の位）
+    if (g_state == State::SCREEN0_ONES) {
+        if (CoreS3.Touch.getCount() > 0) {
+            auto t0 = CoreS3.Touch.getDetail();
+            if (t0.wasPressed()) {
+                Serial.printf("[S0_ONES] touch x=%d y=%d\n", t0.x, t0.y);
+                int hit = hitScreen0(t0.x, t0.y, NumStep::ONES);
+                if (hit >= 0) {
+                    g_partOnes = hit;
+                    g_state = State::SCREEN0_CONFIRM;
+                    drawScreen0(NumStep::CONFIRM, g_partTens, g_partOnes);
+                }
+            }
+        }
+        return;
+    }
+
+    // 画面0: 参加者番号確認
+    if (g_state == State::SCREEN0_CONFIRM) {
+        if (CoreS3.Touch.getCount() > 0) {
+            auto t0 = CoreS3.Touch.getDetail();
+            if (t0.wasPressed()) {
+                int hit = hitScreen0(t0.x, t0.y, NumStep::CONFIRM);
+                if (hit == -2) {
+                    g_state = State::SCREEN0_TENS;
+                    drawScreen0(NumStep::TENS, 0, 0);
+                } else if (hit == -3) {
+                    drawSplash();
+                    g_state = State::SCREEN1;
+                }
+            }
+        }
+        return;
+    }
+
     // タッチ読み取り
     if (CoreS3.Touch.getCount() == 0) {
         if (g_state == State::SCREEN5_REC) rec_write_chunk();
@@ -140,9 +252,9 @@ void loop() {
             drawSplash();
             break;
         case Btn1::USERNAME:
-            strncpy(g_lastTask, "name", sizeof(g_lastTask));
-            drawScreen5(false);
-            g_state = State::SCREEN5_READY;
+            // ユーザー番号設定→画面0へ
+            g_state = State::SCREEN0_TENS;
+            drawScreen0(NumStep::TENS, 0, 0);
             break;
         case Btn1::NEXT:
             drawScreen2();
