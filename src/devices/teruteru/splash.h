@@ -198,6 +198,6 @@ inline void drawSplash() {
 
     // 下段3ボタン
     drawBtnJP(S1_HAJIME,   d.color565(49, 134, 48),  "はじめに");
-    drawBtnJP(S1_USERNAME, d.color565(196, 164, 0),  "ユーザー", "番号設定");
+    drawBtnJP2(S1_USERNAME, d.color565(196, 164, 0), "ユーザー", "番号設定");
     drawBtn(S1_NEXT,       d.color565(41, 69, 149),  "Next", "(>>)");
 }
