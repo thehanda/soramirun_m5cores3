@@ -2,8 +2,6 @@
 #include <M5CoreS3.h>
 #include "ui.h"
 
-
-
 inline void drawSplash() {
     auto& d = CoreS3.Display;
     d.fillScreen(0x4DA8);
@@ -69,12 +67,12 @@ inline void drawSplash() {
     // 口：丸い雲
     d.fillCircle(160, 132, 17, TFT_WHITE);
 
-    // ソラミルン（左寄せ）
+    // 機体名（左寄せ）
     d.setTextDatum(ML_DATUM);
     d.setTextColor(d.color565(30, 100, 220));
     d.setFont(&fonts::efontJA_16);
     d.setTextSize(2);
-    d.drawString("ソラミルン", 8, 42);
+    d.drawString(DEVICE_NAME, 8, 42);
     d.setFont(nullptr);
 
     // 右上：音量ボタン（Nextボタンと同サイズ）

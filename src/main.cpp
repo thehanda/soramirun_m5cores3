@@ -3,11 +3,31 @@
 #include <SD.h>
 #include <time.h>
 #include <WiFi.h>
-#include "splash.h"
+
+// config.h を ui.h より先にインクルード（DEVICE_NAME を以降のヘッダで使えるようにする）
+#if defined(DEVICE_TERUTERU)
+#  include "devices/teruteru/config.h"
+#elif defined(DEVICE_WAKUWAKU)
+#  include "devices/wakuwaku/config.h"
+#elif defined(DEVICE_FURUFURU)
+#  include "devices/furufuru/config.h"
+#else
+#  error "Device not specified. Add -D DEVICE_TERUTERU / DEVICE_WAKUWAKU / DEVICE_FURUFURU to build_flags."
+#endif
+
 #include "ui.h"
 #include "audio_player.h"
 #include "recorder.h"
 #include "camera_utils.h"
+
+// splash.h は ui.h の後にインクルード
+#if defined(DEVICE_TERUTERU)
+#  include "devices/teruteru/splash.h"
+#elif defined(DEVICE_WAKUWAKU)
+#  include "devices/wakuwaku/splash.h"
+#elif defined(DEVICE_FURUFURU)
+#  include "devices/furufuru/splash.h"
+#endif
 
 enum class State {
     SCREEN0_TENS,    // 参加者番号：十の位選択
@@ -83,10 +103,11 @@ void setup() {
     CoreS3.begin(cfg);
     Serial.begin(115200);
     delay(2000);
-    Serial.println("=== Soramirun Start ===");
+    Serial.println("=== " DEVICE_NAME " Start ===");
     CoreS3.Display.setRotation(1);
     if (!initSD()) { while (true) delay(1000); }
     loadSeq();
+    rec_initPlayBuffer();
 
     drawSplash();
 
@@ -168,7 +189,7 @@ void loop() {
                     drawScreen2();
                     ui_setStatus(" Cam Error", TFT_RED);
                     delay(1500);
-                    ui_setStatus(" Soramirun", TFT_WHITE);
+                    ui_setStatus(" " DEVICE_NAME, TFT_WHITE);
                     g_state = State::SCREEN2;
                 }
             }
@@ -283,7 +304,7 @@ void loop() {
                 ui_setStatus(" Cam Error", TFT_RED);
                 delay(1500);
                 drawScreen2();
-                ui_setStatus(" Soramirun", TFT_WHITE);
+                ui_setStatus(" " DEVICE_NAME, TFT_WHITE);
                 break;
             }
             CoreS3.Display.fillScreen(TFT_BLACK);
@@ -340,7 +361,7 @@ void loop() {
             strncpy(g_lastTask, "task4", sizeof(g_lastTask));
             ui_setStatus(" Task 4...", TFT_YELLOW);
             playMp3("/audio/task4.wav");
-            ui_setStatus(" Soramirun", TFT_WHITE);
+            ui_setStatus(" " DEVICE_NAME, TFT_WHITE);
             // 画面3のまま
             break;
         case Btn3::TASK5:
@@ -364,18 +385,23 @@ void loop() {
         Btn5 btn = hitScreen5(t.x, t.y);
         switch (btn) {
         case Btn5::STARTREC: {
-            ui_setStatus(" Preparing...", TFT_YELLOW);
             // 一時ファイルに録音（Saveで正式保存）
             strncpy(s_lastRecPath, "/recordings/_tmp.wav", sizeof(s_lastRecPath));
+            for (int i = 0; i < 2; i++) {
+                drawScreen5Prep(true);
+                delay(500);
+                drawScreen5Prep(false);
+                delay(500);
+            }
+            // マイク初期化中（ブロッキング）は準備中表示のまま静止させる
+            drawScreen5Prep(true);
             rec_start("/recordings/_tmp.wav");
             drawScreen5(true);
             g_state = State::SCREEN5_REC;
             break;
         }
         case Btn5::PLAY:
-            ui_setStatus(" Playing...", TFT_CYAN);
             rec_play();
-            ui_setStatus(" Stopped", TFT_WHITE);
             break;
         case Btn5::SAVE: {
             // 一時ファイルを正式ファイル名にリネーム
@@ -383,17 +409,26 @@ void loop() {
             buildFilename(fname, sizeof(fname), g_lastTask, "wav");
             if (SD.exists("/recordings/_tmp.wav")) {
                 SD.rename("/recordings/_tmp.wav", fname);
+                strncpy(s_lastRecPath, fname, sizeof(s_lastRecPath));
                 Serial.printf("[Save] %s\n", fname);
             }
-            ui_setStatus(" Saved! (^-^)", TFT_GREEN);
-            delay(1500);
             updateRecStatus5(false);
+            drawSaveBtn5("完了");
+            delay(2000);
+            drawSaveBtn5("保存");
             break;
         }
         case Btn5::YARI: {
-            ui_setStatus(" Preparing...", TFT_YELLOW);
             // 一時ファイルに上書き録音
             strncpy(s_lastRecPath, "/recordings/_tmp.wav", sizeof(s_lastRecPath));
+            for (int i = 0; i < 2; i++) {
+                drawScreen5Prep(true);
+                delay(500);
+                drawScreen5Prep(false);
+                delay(500);
+            }
+            // マイク初期化中（ブロッキング）は準備中表示のまま静止させる
+            drawScreen5Prep(true);
             rec_start("/recordings/_tmp.wav");
             drawScreen5(true);
             g_state = State::SCREEN5_REC;
@@ -434,7 +469,7 @@ void loop() {
             ui_setStatus(ok ? " Saved!(^-^)" : " Save Error",
                          ok ? TFT_GREEN : TFT_RED);
             delay(1000);
-            ui_setStatus(" Soramirun", TFT_WHITE);
+            ui_setStatus(" " DEVICE_NAME, TFT_WHITE);
             g_state = State::SCREEN2;
             break;
         }

@@ -29,7 +29,7 @@
 
 ## WiFi（自宅・NTP同期用）
 SSID: Buffalo-A-35C0
-PW: 6a5idibtfxdtk
+
 
 ## GitHub
 https://github.com/thehanda/soramirun_m5cores3

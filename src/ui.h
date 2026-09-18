@@ -5,12 +5,13 @@ constexpr uint16_t COL_BG     = TFT_BLACK;
 constexpr uint16_t COL_STS_BG = 0x1082;
 constexpr uint16_t COL_BLUE   = 0x035F; // 明るい青
 constexpr uint16_t COL_RED    = 0x8000;
-constexpr uint16_t COL_GREEN  = 0x3186;
+constexpr uint16_t COL_GREEN  = 0x4D6A;
 constexpr uint16_t COL_ORANGE = 0xC4A0;
 constexpr uint16_t COL_GRAY   = 0x4208;
 constexpr uint16_t COL_CYAN   = 0x0451;
 constexpr uint16_t COL_PURPLE = 0x6014;
 constexpr uint16_t COL_BLACK  = 0x0861;
+constexpr uint16_t COL_YELLOW = 0xE620;
 
 struct Rect { int16_t x, y, w, h; };
 
@@ -50,6 +51,21 @@ static void drawBtnJP(const Rect& r, uint16_t bg, const char* jp,
     } else {
         d.drawString(jp, r.x+r.w/2, r.y+r.h/2);
     }
+    d.setFont(nullptr);
+}
+
+// 2行とも日本語フォントで描画するボタン
+static void drawBtnJP2(const Rect& r, uint16_t bg,
+                       const char* line1, const char* line2) {
+    auto& d = CoreS3.Display;
+    d.fillRoundRect(r.x, r.y, r.w, r.h, 8, bg);
+    d.drawRoundRect(r.x, r.y, r.w, r.h, 8, 0x4A69);
+    d.setTextColor(TFT_WHITE);
+    d.setTextDatum(MC_DATUM);
+    d.setFont(&fonts::efontJA_16);
+    d.setTextSize(1);
+    d.drawString(line1, r.x+r.w/2, r.y+r.h/2-14);
+    d.drawString(line2, r.x+r.w/2, r.y+r.h/2+14);
     d.setFont(nullptr);
 }
 
@@ -203,7 +219,7 @@ enum class Btn2 { NONE, TASK1, TASK2, TASK3, OPTION, NEXT, END };
 
 inline void drawScreen2() {
     CoreS3.Display.fillScreen(COL_BG);
-    ui_setStatus(" Soramirun", TFT_WHITE);
+    ui_setStatus(" " DEVICE_NAME, TFT_WHITE);
     drawBtn(S2_TASK1,  COL_GRAY,   "Task 1", "(^-^)");
     drawBtn(S2_TASK2,  COL_GRAY,   "Task 2", "(^-^)");
     drawBtn(S2_TASK3,  COL_GRAY,   "Task 3", "(^-^)");
@@ -236,10 +252,10 @@ enum class Btn3 { NONE, TASK4, TASK5, BACK };
 
 inline void drawScreen3() {
     CoreS3.Display.fillScreen(COL_BG);
-    ui_setStatus(" Soramirun", TFT_WHITE);
+    ui_setStatus(" " DEVICE_NAME, TFT_WHITE);
     drawBtn(S3_TASK4, COL_GRAY,  "Task 4", "(^-^)");
     drawBtn(S3_TASK5, COL_GRAY,  "Task 5", "(^-^)");
-    drawBtn(S3_BACK,  COL_BLACK, "Back",   nullptr);
+    drawBtnJP(S3_BACK, COL_BLACK, "戻る");
 }
 
 inline Btn3 hitScreen3(int16_t x, int16_t y) {
@@ -263,29 +279,59 @@ constexpr Rect S5_BACK     = { 216, 134, 100,  90 };
 
 enum class Btn5 { NONE, STARTREC, PLAY, SAVE, YARI, BACK };
 
+// 録音中ボタン：上半分「録音中」(赤)、下半分「STOP」(青) の2色表示
+static void drawRecActiveBtn(const Rect& r) {
+    auto& d = CoreS3.Display;
+    int16_t halfH = r.h / 2;
+    d.fillRoundRect(r.x, r.y, r.w, r.h, 8, COL_RED);
+    d.fillRect(r.x, r.y + halfH, r.w, r.h - halfH, COL_BLUE);
+    d.drawRoundRect(r.x, r.y, r.w, r.h, 8, 0x4A69);
+    d.setTextColor(TFT_WHITE);
+    d.setTextDatum(MC_DATUM);
+    d.setFont(&fonts::efontJA_16);
+    d.setTextSize(1);
+    d.drawString("録音中", r.x+r.w/2, r.y + halfH/2);
+    d.setFont(nullptr);
+    d.setTextSize(2);
+    d.drawString("STOP", r.x+r.w/2, r.y + halfH + (r.h-halfH)/2);
+}
+
+inline void drawSaveBtn5(const char* label) {
+    drawBtnJP(S5_SAVE, COL_GREEN, label);
+}
+
 inline void drawScreen5(bool isRecording) {
     auto& d = CoreS3.Display;
     d.fillScreen(COL_BG);
-    ui_setStatus(isRecording ? " REC..." : " Record",
-                 isRecording ? TFT_RED : TFT_WHITE);
     if (isRecording) {
-        drawBtn(S5_STARTREC, COL_ORANGE, "Stop",      "(>_<)", 2, 2);
+        drawRecActiveBtn(S5_STARTREC);
     } else {
-        drawBtn(S5_STARTREC, COL_RED,    "Start REC", "(^o^)", 2, 2);
+        drawBtnJP2(S5_STARTREC, COL_RED, "録音", "ボタン");
     }
-    drawBtnJP(S5_PLAY, COL_GREEN,  "再生");
-    drawBtn(S5_SAVE,   COL_ORANGE, "Save", "(^-^)");
+    drawBtnJP2(S5_PLAY, COL_GREEN, "再生して", "確認");
+    drawBtnJP(S5_SAVE, COL_GREEN,  "保存");
     drawBtnJP(S5_YARI, COL_PURPLE, "やりなおし");
-    drawBtn(S5_BACK,   COL_BLACK,  "Back", nullptr);
+    drawBtnJP(S5_BACK, COL_BLACK,  "戻る");
 }
 
 inline void updateRecStatus5(bool isRecording) {
-    ui_setStatus(isRecording ? " REC..." : " Stopped",
-                 isRecording ? TFT_RED : TFT_WHITE);
     if (isRecording) {
-        drawBtn(S5_STARTREC, COL_ORANGE, "Stop",      "(>_<)", 2, 2);
+        drawRecActiveBtn(S5_STARTREC);
     } else {
-        drawBtn(S5_STARTREC, COL_RED,    "Start REC", "(^o^)", 2, 2);
+        drawBtnJP2(S5_STARTREC, COL_RED, "録音", "ボタン");
+    }
+}
+
+// 録音準備中（点滅トグル用）: on=黄色で「録音」「準備中」, off=非表示
+inline void drawScreen5Prep(bool on) {
+    auto& d = CoreS3.Display;
+    if (on) {
+        drawBtnJP2(S5_STARTREC, COL_YELLOW, "録音", "準備中");
+    } else {
+        d.fillRoundRect(S5_STARTREC.x, S5_STARTREC.y,
+                        S5_STARTREC.w, S5_STARTREC.h, 8, COL_BG);
+        d.drawRoundRect(S5_STARTREC.x, S5_STARTREC.y,
+                        S5_STARTREC.w, S5_STARTREC.h, 8, 0x4A69);
     }
 }
 
@@ -310,9 +356,9 @@ constexpr Rect S7_BACK = { 216, 148, 100, 86 };
 enum class Btn7 { NONE, SAVE, YARI, BACK };
 
 inline void drawScreen7Buttons() {
-    drawBtn(S7_SAVE,   COL_ORANGE, "Save",  "(^-^)");
+    drawBtnJP(S7_SAVE, COL_ORANGE, "保存");
     drawBtnJP(S7_YARI, COL_PURPLE, "やりなおし");
-    drawBtn(S7_BACK,   COL_BLACK,  "Back",  nullptr);
+    drawBtnJP(S7_BACK, COL_BLACK,  "戻る");
 }
 
 inline Btn7 hitScreen7(int16_t x, int16_t y) {

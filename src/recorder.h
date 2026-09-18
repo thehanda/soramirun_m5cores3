@@ -104,6 +104,7 @@ inline void rec_stop() {
     delay(200); // タスク終了を待つ
 
     CoreS3.Mic.end();
+    delay(300); // I2S解放待ち（この後スピーカー側で再利用するため）
 
     WavHeader hdr;
     hdr.dataSize = s_dataBytesWritten;
@@ -122,6 +123,20 @@ inline void rec_write_chunk() {}
 // 録音したファイルを再生する
 static char s_lastRecPath[60] = "";
 
+// 再生用バッファ：毎回ps_malloc/freeすると長時間使用でPSRAMが断片化し
+// 確保に失敗することがあったため、起動時に一度だけ確保して使い回す。
+constexpr size_t REC_PLAY_BUF_CAP = 2 * 1024 * 1024; // 16kHz/mono/16bitで約65秒分
+static uint8_t*  s_playBuf    = nullptr;
+static size_t    s_playBufCap = 0;
+
+inline void rec_initPlayBuffer() {
+    if (s_playBuf) return;
+    s_playBuf = (uint8_t*)ps_malloc(REC_PLAY_BUF_CAP);
+    s_playBufCap = s_playBuf ? REC_PLAY_BUF_CAP : 0;
+    Serial.printf("[Rec] Play buffer init: %s (%u bytes)\n",
+                  s_playBuf ? "OK" : "FAILED", (unsigned)REC_PLAY_BUF_CAP);
+}
+
 inline void rec_play() {
     if (strlen(s_lastRecPath) == 0) return;
     Serial.printf("[Rec] Play: %s\n", s_lastRecPath);
@@ -130,24 +145,38 @@ inline void rec_play() {
     if (!f) { Serial.println("[Rec] Play: file not found"); return; }
 
     size_t fileSize = f.size();
-    uint8_t* buf = (uint8_t*)ps_malloc(fileSize);
-    if (!buf) { f.close(); return; }
-    f.read(buf, fileSize);
+    if (!s_playBuf || fileSize > s_playBufCap) {
+        Serial.printf("[Rec] Play: buffer unavailable (need %u, cap %u)\n",
+                      (unsigned)fileSize, (unsigned)s_playBufCap);
+        f.close();
+        return;
+    }
+    f.read(s_playBuf, fileSize);
     f.close();
 
-    uint32_t sr = buf[24]|(buf[25]<<8)|(buf[26]<<16)|(buf[27]<<24);
+    uint32_t sr = s_playBuf[24]|(s_playBuf[25]<<8)|(s_playBuf[26]<<16)|(s_playBuf[27]<<24);
     const size_t HDR = 44;
+    size_t numSamples = (fileSize - HDR) / 2;
+    // 再生時間の見積り＋余裕を持たせた上限。ドライバ異常でisPlaying()が
+    // 返り続けても無限ループにならないようにする安全弁。
+    uint32_t expectedMs = (sr > 0) ? (uint32_t)((uint64_t)numSamples * 1000 / sr) : 0;
+    uint32_t maxWaitMs  = expectedMs + 2000;
 
     CoreS3.Speaker.begin();
     CoreS3.Speaker.setVolume(200);
-    CoreS3.Speaker.playRaw((const int16_t*)(buf+HDR),
-                           (fileSize-HDR)/2, sr, false, 1, 0);
+    CoreS3.Speaker.playRaw((const int16_t*)(s_playBuf+HDR),
+                           numSamples, sr, false, 1, 0);
+    uint32_t startMs = millis();
     while (CoreS3.Speaker.isPlaying()) {
         CoreS3.update();
+        if (millis() - startMs > maxWaitMs) {
+            Serial.println("[Rec] Play: timeout, forcing stop");
+            CoreS3.Speaker.stop();
+            break;
+        }
         delay(10);
     }
     CoreS3.Speaker.end();
     s_speakerInited = false;
-    free(buf);
     Serial.println("[Rec] Play done");
 }
