@@ -4739,6 +4739,9 @@ inline void drawSplash() {
     // 音量ボタン（右上）
     drawVolBtn();
 
+    // バッテリー残量（右側中段）
+    drawBatteryLevel();
+
     // 下段3ボタン
     drawBtnJP(S1_HAJIME,   d.color565(49, 134, 48),  "はじめに");
     drawBtnJP2(S1_USERNAME, d.color565(196, 164, 0), "ユーザー", "番号設定");

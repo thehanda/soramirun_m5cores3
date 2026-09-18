@@ -95,6 +95,18 @@ inline void drawVolBtn() {
     d.setTextSize(3);
     d.drawString(VOL_LABELS[g_volumeLevel], 268, 52);
 }
+// 画面1右側中段にバッテリー残量を描画（VOLボタン下・下段ボタン上の空きエリア）
+inline void drawBatteryLevel() {
+    auto& d = CoreS3.Display;
+    int8_t bat = CoreS3.Power.getBatteryLevel();
+    char buf[12];
+    snprintf(buf, sizeof(buf), "Bat %d%%", (int)bat);
+    d.setFont(nullptr);
+    d.setTextSize(1);
+    d.setTextColor(TFT_WHITE);
+    d.setTextDatum(MC_DATUM);
+    d.drawString(buf, 268, 119);
+}
 // ── Screen 0: 参加者番号設定 ────────────────────────
 enum class NumStep { TENS, ONES, CONFIRM };
 
