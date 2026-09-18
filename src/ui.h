@@ -102,8 +102,8 @@ inline void drawBatteryLevel() {
     char buf[12];
     snprintf(buf, sizeof(buf), "Bat %d%%", (int)bat);
     d.setFont(nullptr);
-    d.setTextSize(1);
-    d.setTextColor(TFT_WHITE);
+    d.setTextSize(2);
+    d.setTextColor(TFT_BLACK);
     d.setTextDatum(MC_DATUM);
     d.drawString(buf, 268, 119);
 }
